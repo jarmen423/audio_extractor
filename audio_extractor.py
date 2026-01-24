@@ -10,14 +10,16 @@ import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog
 from urllib.parse import urlparse
+import urllib.error
 from moviepy import VideoFileClip
 import yt_dlp
+import imageio_ffmpeg
 
 # Constants
 DEFAULT_BITRATE = '192k'
 TEMP_FILENAME_PREFIX = 'downloaded_'
 DEFAULT_OUTPUT_EXT = 'mp3'
-VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.mov', '.avi']
+VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.mov', '.avi', '.webm']
 TEMP_DOWNLOAD_DIR = 'temp_downloads'
 
 
@@ -127,124 +129,89 @@ def extract_audio_from_video(video_path, output_ext=DEFAULT_OUTPUT_EXT, bitrate=
         
     return output_path
 
-def extract_audio_from_url():
+def download_media_from_url(url, output_dir=TEMP_DOWNLOAD_DIR):
     """
-    Extracts audio from a video URL by downloading the video and extracting audio.
+    Downloads video/audio from URL to local temp file.
 
     Summary:
-        Accepts a URL instead of a local file path, downloads the media using yt-dlp,
-        extracts the audio track, and returns the path to the audio file.
+        Uses yt-dlp to download media from various platforms including YouTube,
+        Twitch, TikTok, Instagram, and more. Handles authentication, playlist
+        downloading, and format selection. Library uses FFmpeg internally for
+        downloading and transcoding.
 
     Extended Description (Deep Education):
-        yt-dlp is a powerful command-line tool that can download media from thousands
-        of platforms including YouTube, Twitch, TikTok, Instagram, and more. It handles
-        authentication, playlist downloading, and format selection. The library uses
-        FFmpeg internally for downloading and transcoding media streams. By downloading
-        the full video first and then extracting just the audio track, we ensure maximum
-        compatibility and quality control.
+        yt-dlp is a fork of youtube-dl that supports 1000+ platforms. It uses
+        FFmpeg under the hood to merge video and audio streams when downloading
+        formats like 'bestvideo+bestaudio'. The tool can handle authentication
+        for private content, playlist downloads, and format selection. The
+        download process is asynchronous and provides detailed information about
+        the media being downloaded.
 
     Contextual Purpose (Project Role):
-        This function provides URL-based audio extraction capability to the GUI interface,
-        allowing users to process online media without needing to download it manually
-        first. It serves as the bridge between online content and the local audio extraction
-        pipeline.
+        This nested function provides the core download functionality for the
+        URL-based extraction workflow, ensuring that all downloaded media is
+        properly handled and returned as an absolute file path.
 
     Args:
-        None (uses GUI input for URL).
+        url (str): URL to the content.
+        output_dir (str): Directory to save downloaded files. Defaults to
+                            TEMP_DOWNLOAD_DIR constant.
 
     Returns:
-        str: The path to the successfully created audio file.
+        str: Absolute path to the downloaded file.
 
     Raises:
-        ValueError: If the URL is invalid or download fails.
-        RuntimeError: If yt-dlp is not installed or fails to download media.
+        ValueError: If URL is invalid or download fails.
+        RuntimeError: If yt-dlp is not installed or fails to download.
 
     Key Technologies/APIs:
-        - yt-dlp: Command-line tool for downloading media from various platforms.
+        - yt_dlp.YoutubeDL: Python wrapper for yt-dlp functionality.
         - FFmpeg: Underlying engine used by yt-dlp for media processing.
     """
-    def download_media_from_url(url, output_dir=TEMP_DOWNLOAD_DIR):
-        """
-        Downloads video/audio from URL to local temp file.
+    # Validate URL format
+    if not is_valid_url(url):
+        raise ValueError(f"Invalid URL format: {url}")
 
-        Summary:
-            Uses yt-dlp to download media from various platforms including YouTube,
-            Twitch, TikTok, Instagram, and more. Handles authentication, playlist
-            downloading, and format selection. Library uses FFmpeg internally for
-            downloading and transcoding.
+    # Create temp directory
+    os.makedirs(output_dir, exist_ok=True)
 
-        Extended Description (Deep Education):
-            yt-dlp is a fork of youtube-dl that supports 1000+ platforms. It uses
-            FFmpeg under the hood to merge video and audio streams when downloading
-            formats like 'bestvideo+bestaudio'. The tool can handle authentication
-            for private content, playlist downloads, and format selection. The
-            download process is asynchronous and provides detailed information about
-            the media being downloaded.
+    # Generate unique filename using constant
+    temp_filename = f'{TEMP_FILENAME_PREFIX}{int(time.time())}.%(ext)s'
+    output_template = os.path.join(output_dir, temp_filename)
 
-        Contextual Purpose (Project Role):
-            This nested function provides the core download functionality for the
-            URL-based extraction workflow, ensuring that all downloaded media is
-            properly handled and returned as an absolute file path.
+    # yt-dlp options
+    ydl_opts = {
+        'format': 'bestvideo+bestaudio/best',
+        'outtmpl': output_template,
+        'quiet': True,
+        'no_warnings': True,
+        'ffmpeg_location': imageio_ffmpeg.get_ffmpeg_exe(),
+    }
 
-        Args:
-            url (str): URL to the content.
-            output_dir (str): Directory to save downloaded files. Defaults to
-                             TEMP_DOWNLOAD_DIR constant.
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            # Get the actual downloaded filename
+            downloaded_file = ydl.prepare_filename(info)
 
-        Returns:
-            str: Absolute path to the downloaded file.
+            # Handle case where extension might be different
+            if not os.path.exists(downloaded_file):
+                # Find the actual file
+                files = [f for f in os.listdir(output_dir) 
+                        if f.startswith(os.path.basename(downloaded_file))]
+                if files:
+                    downloaded_file = os.path.join(output_dir, files[0])
 
-        Raises:
-            ValueError: If URL is invalid or download fails.
-            RuntimeError: If yt-dlp is not installed or fails to download.
+            # Validate downloaded file path
+            if not os.path.isabs(downloaded_file):
+                downloaded_file = os.path.abspath(downloaded_file)
 
-        Key Technologies/APIs:
-            - yt_dlp.YoutubeDL: Python wrapper for yt-dlp functionality.
-            - FFmpeg: Underlying engine used by yt-dlp for media processing.
-        """
-        # Validate URL format
-        if not is_valid_url(url):
-            raise ValueError(f"Invalid URL format: {url}")
+            return downloaded_file
 
-        # Create temp directory
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Generate unique filename using constant
-        temp_filename = f'{TEMP_FILENAME_PREFIX}{int(time.time())}.%(ext)s'
-        output_template = os.path.join(output_dir, temp_filename)
-
-        # yt-dlp options
-        ydl_opts = {
-            'format': 'bestvideo+bestaudio/best',
-            'outtmpl': output_template,
-            'quiet': True,
-            'no_warnings': True,
-        }
-
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                # Get the actual downloaded filename
-                downloaded_file = ydl.prepare_filename(info)
-
-                # Handle case where extension might be different
-                if not os.path.exists(downloaded_file):
-                    # Find the actual file
-                    files = [f for f in os.listdir(output_dir) 
-                            if f.startswith(os.path.basename(downloaded_file))]
-                    if files:
-                        downloaded_file = os.path.join(output_dir, files[0])
-
-                # Validate downloaded file path
-                if not os.path.isabs(downloaded_file):
-                    raise ValueError("Downloaded file path is not absolute")
-
-                return downloaded_file
-
-        except (yt_dlp.utils.DownloadError, ValueError, urllib.error.URLError) as e:
-            raise RuntimeError(f'Failed to download media from URL: {str(e)}')
-        except Exception as e:
-            raise RuntimeError(f'Unexpected error during download: {str(e)}')        
+    except (yt_dlp.utils.DownloadError, ValueError, urllib.error.URLError) as e:
+        raise RuntimeError(f'Failed to download media from URL: {str(e)}')
+    except Exception as e:
+        raise RuntimeError(f'Unexpected error during download: {str(e)}')        
 def run_gui():
     """
     Initializes a tkinter window to handle file selection and processing.
@@ -327,7 +294,7 @@ def run_gui():
         # File input
         file_path = filedialog.askopenfilename(
             title="Select video for audio extractor",
-            filetypes=[("Video Files", f"*.{' '.join(VIDEO_EXTENSIONS)}"), ("All Files", "*.*")]
+            filetypes=[("Video Files", " ".join([f"*{ext}" for ext in VIDEO_EXTENSIONS])), ("All Files", "*.*")]
         )
 
         if not file_path:

@@ -1,2 +1,4 @@
 moviepy
 yt-dlp
+ffmpeg-python
+imageio_ffmpeg
