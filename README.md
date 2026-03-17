@@ -60,6 +60,21 @@ pip install -r requirements.txt
 python audio_extractor.py
 ```
 
+### Download Video From URL (CLI)
+
+Use the dedicated downloader script for full video downloads:
+
+```bash
+python download_video.py "https://www.youtube.com/watch?v=example"
+python download_video.py "https://www.instagram.com/reel/XXXXXXXXXXX/" -o downloads
+python download_video.py "https://www.tiktok.com/@user/video/1234567890" --cookies-from-browser chrome
+```
+
+Options:
+- `--audio-only`: Download audio only
+- `--playlist`: Allow playlist/channel downloads
+- `--no-overwrites`: Skip files that already exist
+
 ### Using Local Files
 
 1. Launch the application
@@ -89,6 +104,34 @@ You can also use FFmpeg directly to extract audio from URLs:
 ffmpeg -i "https://www.youtube.com/watch?v=example" -vn -acodec libmp3lame -b:a 192k output.mp3
 ```
 
+## Frame Extraction Script
+
+Use `extract_frames.py` when you want frame sampling controls, optional GUI pickers, and per-frame timestamps.
+
+### Basic usage (GUI file picker)
+
+```bash
+python extract_frames.py
+```
+
+### Sample every 10 seconds and write timestamps CSV
+
+```bash
+python extract_frames.py "input.mp4" --mode fps --fps 1/10 --timestamps-csv
+```
+
+This writes extracted images to `frames_YYYYMMDD_HHMMSS/` and a `timestamps.csv` file in that folder.
+
+### Add per-frame EXIF metadata (second pass with exiftool)
+
+```bash
+python extract_frames.py "input.mp4" --mode fps --fps 1/10 --timestamps-csv --write-exif
+```
+
+Notes:
+- `--write-exif` requires `exiftool` installed and on your PATH.
+- Metadata is written to `ImageDescription` and `Comment` as `video_timestamp=HH:MM:SS.mmm (X.XXXXXXs)`.
+
 ## Requirements
 
 - Python 3.7+
@@ -101,6 +144,7 @@ ffmpeg -i "https://www.youtube.com/watch?v=example" -vn -acodec libmp3lame -b:a 
 ```
 audio_extractor/
 ├── audio_extractor.py    # Main application
+├── download_video.py     # CLI video downloader for URL links
 ├── requirements.txt      # Python dependencies
 ├── README.md            # This file
 └── CLAUDE.md           # Developer documentation

@@ -11,3 +11,5 @@ __pycache__/
 *.mov
 *.avi
 .aider*
+cookies/*
+temp*/
